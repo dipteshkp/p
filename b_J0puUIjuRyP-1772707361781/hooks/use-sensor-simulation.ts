@@ -10,7 +10,7 @@ interface Metrics {
   secondary: number | string
 }
 
-export function useSensorData(mode: MonitoringMode, hardwareSource: "phone" | "external") {
+export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone" | "external" = "phone") {
   const [status, setStatus] = useState<MonitoringStatus>("Idle")
   const [metrics, setMetrics] = useState<Metrics>({ primary: 0, secondary: 0 })
   const [chartData, setChartData] = useState<number[]>([])
@@ -43,7 +43,7 @@ export function useSensorData(mode: MonitoringMode, hardwareSource: "phone" | "e
           return { magnitude, metrics: { primary: rms, secondary: peak } }
         }
         case "earthquake": {
-          if (magnitude > 1.5) { // Adjust threshold based on real-world testing
+          if (magnitude > 1.5) { // Threshold for seismic event
             eventCounterRef.current += 1
           }
           return {
@@ -63,7 +63,7 @@ export function useSensorData(mode: MonitoringMode, hardwareSource: "phone" | "e
     [mode]
   )
 
-  // This function continuously updates our ref with the latest phone sensor data
+  // Continuously update our ref with the latest phone sensor data
   const handleDeviceMotion = useCallback((event: DeviceMotionEvent) => {
     if (event.accelerationIncludingGravity) {
       latestReadingRef.current = {
@@ -78,6 +78,7 @@ export function useSensorData(mode: MonitoringMode, hardwareSource: "phone" | "e
     if (status === "Monitoring") return
     setError(null)
 
+    // Setup for Phone Sensor
     if (hardwareSource === "phone") {
       // Handle iOS 13+ permission requirements
       if (typeof (DeviceMotionEvent as any).requestPermission === 'function') {
@@ -93,8 +94,6 @@ export function useSensorData(mode: MonitoringMode, hardwareSource: "phone" | "e
           return
         }
       }
-      
-      // Attach the event listener to catch sensor updates
       window.addEventListener('devicemotion', handleDeviceMotion)
     }
 
@@ -103,91 +102,5 @@ export function useSensorData(mode: MonitoringMode, hardwareSource: "phone" | "e
     dataBufferRef.current = []
     setChartData([])
 
-    // Sample the data every 80ms regardless of hardware source
-    intervalRef.current = setInterval(() => {
-      let currentX = 0
-      let currentY = 0
-      let currentZ = 0
-
-      if (hardwareSource === "phone") {
-        // Read from the latest phone sensor data
-        currentX = latestReadingRef.current.x
-        currentY = latestReadingRef.current.y
-        currentZ = latestReadingRef.current.z
-      } else if (hardwareSource === "external") {
-        // PLACEHOLDER FOR EXTERNAL HARDWARE (ESP32/MPU6050)
-        // In the future, you will pull data from a WebSocket or fetch API here.
-        // For now, it stays at 0 so it doesn't use phone data.
-        currentX = 0
-        currentY = 0
-        currentZ = 0
-      }
-
-      dataBufferRef.current.push({ x: currentX, y: currentY, z: currentZ })
-      if (dataBufferRef.current.length > MAX_DATA_POINTS) {
-        dataBufferRef.current.shift()
-      }
-
-      const { magnitude, metrics: newMetrics } = computeMetrics(currentX, currentY, currentZ)
-      setMetrics(newMetrics)
-      setChartData((prev) => {
-        const next = [...prev, magnitude]
-        return next.length > MAX_DATA_POINTS ? next.slice(-MAX_DATA_POINTS) : next
-      })
-    }, 80)
-  }, [status, hardwareSource, computeMetrics, handleDeviceMotion])
-
-  const stopMonitoring = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current)
-      intervalRef.current = null
-    }
-    if (hardwareSource === "phone") {
-      window.removeEventListener('devicemotion', handleDeviceMotion)
-    }
-    setStatus("Stopped")
-  }, [hardwareSource, handleDeviceMotion])
-
-  const exportData = useCallback(() => {
-    const buffer = dataBufferRef.current
-    if (buffer.length === 0) {
-      alert("No data to export. Start monitoring first.")
-      return
-    }
-    const header = "index,x,y,z,magnitude\n"
-    const rows = buffer
-      .map((d, i) => {
-        const mag = Math.sqrt(d.x * d.x + d.y * d.y + d.z * d.z)
-        return `${i},${d.x.toFixed(4)},${d.y.toFixed(4)},${d.z.toFixed(4)},${mag.toFixed(4)}`
-      })
-      .join("\n")
-
-    const blob = new Blob([header + rows], { type: "text/csv" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `sensor-data-${mode}-${Date.now()}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }, [mode])
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-      }
-      window.removeEventListener('devicemotion', handleDeviceMotion)
-    }
-  }, [handleDeviceMotion])
-
-  return {
-    status,
-    metrics,
-    chartData,
-    error,
-    startMonitoring,
-    stopMonitoring,
-    exportData,
-  }
-}
+    // Sample the data every 80ms
+    intervalRef
