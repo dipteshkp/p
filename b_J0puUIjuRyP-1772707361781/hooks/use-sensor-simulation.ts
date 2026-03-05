@@ -10,13 +10,18 @@ interface Metrics {
   secondary: number | string
 }
 
-export function useSensorSimulation(mode: MonitoringMode) {
+export function useSensorData(mode: MonitoringMode, hardwareSource: "phone" | "external") {
   const [status, setStatus] = useState<MonitoringStatus>("Idle")
   const [metrics, setMetrics] = useState<Metrics>({ primary: 0, secondary: 0 })
   const [chartData, setChartData] = useState<number[]>([])
+  const [error, setError] = useState<string | null>(null)
+  
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const dataBufferRef = useRef<Array<{ x: number; y: number; z: number }>>([])
   const eventCounterRef = useRef(0)
+  
+  // Stores the absolute latest reading from the phone sensor
+  const latestReadingRef = useRef({ x: 0, y: 0, z: 0 })
 
   const computeMetrics = useCallback(
     (x: number, y: number, z: number): { magnitude: number; metrics: Metrics } => {
@@ -38,7 +43,7 @@ export function useSensorSimulation(mode: MonitoringMode) {
           return { magnitude, metrics: { primary: rms, secondary: peak } }
         }
         case "earthquake": {
-          if (magnitude > 1.5) {
+          if (magnitude > 1.5) { // Adjust threshold based on real-world testing
             eventCounterRef.current += 1
           }
           return {
@@ -58,40 +63,90 @@ export function useSensorSimulation(mode: MonitoringMode) {
     [mode]
   )
 
-  const startMonitoring = useCallback(() => {
+  // This function continuously updates our ref with the latest phone sensor data
+  const handleDeviceMotion = useCallback((event: DeviceMotionEvent) => {
+    if (event.accelerationIncludingGravity) {
+      latestReadingRef.current = {
+        x: event.accelerationIncludingGravity.x || 0,
+        y: event.accelerationIncludingGravity.y || 0,
+        z: event.accelerationIncludingGravity.z || 0,
+      }
+    }
+  }, [])
+
+  const startMonitoring = useCallback(async () => {
     if (status === "Monitoring") return
+    setError(null)
+
+    if (hardwareSource === "phone") {
+      // Handle iOS 13+ permission requirements
+      if (typeof (DeviceMotionEvent as any).requestPermission === 'function') {
+        try {
+          const permissionState = await (DeviceMotionEvent as any).requestPermission()
+          if (permissionState !== 'granted') {
+            setError("Permission to access device sensors was denied.")
+            return
+          }
+        } catch (err) {
+          setError("Error requesting sensor permission. Make sure you are on HTTPS.")
+          console.error(err)
+          return
+        }
+      }
+      
+      // Attach the event listener to catch sensor updates
+      window.addEventListener('devicemotion', handleDeviceMotion)
+    }
 
     setStatus("Monitoring")
     eventCounterRef.current = 0
     dataBufferRef.current = []
     setChartData([])
 
+    // Sample the data every 80ms regardless of hardware source
     intervalRef.current = setInterval(() => {
-      const x = (Math.random() - 0.5) * 2
-      const y = (Math.random() - 0.5) * 2
-      const z = 9.8 + (Math.random() - 0.5) * 0.5
+      let currentX = 0
+      let currentY = 0
+      let currentZ = 0
 
-      dataBufferRef.current.push({ x, y, z })
+      if (hardwareSource === "phone") {
+        // Read from the latest phone sensor data
+        currentX = latestReadingRef.current.x
+        currentY = latestReadingRef.current.y
+        currentZ = latestReadingRef.current.z
+      } else if (hardwareSource === "external") {
+        // PLACEHOLDER FOR EXTERNAL HARDWARE (ESP32/MPU6050)
+        // In the future, you will pull data from a WebSocket or fetch API here.
+        // For now, it stays at 0 so it doesn't use phone data.
+        currentX = 0
+        currentY = 0
+        currentZ = 0
+      }
+
+      dataBufferRef.current.push({ x: currentX, y: currentY, z: currentZ })
       if (dataBufferRef.current.length > MAX_DATA_POINTS) {
         dataBufferRef.current.shift()
       }
 
-      const { magnitude, metrics: newMetrics } = computeMetrics(x, y, z)
+      const { magnitude, metrics: newMetrics } = computeMetrics(currentX, currentY, currentZ)
       setMetrics(newMetrics)
       setChartData((prev) => {
         const next = [...prev, magnitude]
         return next.length > MAX_DATA_POINTS ? next.slice(-MAX_DATA_POINTS) : next
       })
     }, 80)
-  }, [status, computeMetrics])
+  }, [status, hardwareSource, computeMetrics, handleDeviceMotion])
 
   const stopMonitoring = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current)
       intervalRef.current = null
     }
+    if (hardwareSource === "phone") {
+      window.removeEventListener('devicemotion', handleDeviceMotion)
+    }
     setStatus("Stopped")
-  }, [])
+  }, [hardwareSource, handleDeviceMotion])
 
   const exportData = useCallback(() => {
     const buffer = dataBufferRef.current
@@ -116,18 +171,21 @@ export function useSensorSimulation(mode: MonitoringMode) {
     URL.revokeObjectURL(url)
   }, [mode])
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
       }
+      window.removeEventListener('devicemotion', handleDeviceMotion)
     }
-  }, [])
+  }, [handleDeviceMotion])
 
   return {
     status,
     metrics,
     chartData,
+    error,
     startMonitoring,
     stopMonitoring,
     exportData,
