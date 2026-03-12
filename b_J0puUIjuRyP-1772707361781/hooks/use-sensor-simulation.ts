@@ -20,16 +20,10 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
   const dataBufferRef = useRef<Array<{ x: number; y: number; z: number }>>([])
   const eventCounterRef = useRef(0)
   
-  // Refs for incoming data
+  // Stores the absolute latest reading from the phone sensor
   const latestReadingRef = useRef({ x: 0, y: 0, z: 0 })
-  const latestExternalReadingRef = useRef({ x: 0, y: 0, z: 0 })
-  
-  // Ref to hold the active USB serial port and reader
-  const serialPortRef = useRef<any>(null)
-  const keepReadingRef = useRef(true)
 
   const computeMetrics = useCallback(
-    // ... (Keep your exact existing computeMetrics code here)
     (x: number, y: number, z: number): { magnitude: number; metrics: Metrics } => {
       const magnitude = Math.sqrt(x * x + y * y + z * z)
 
@@ -49,7 +43,7 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
           return { magnitude, metrics: { primary: rms, secondary: peak } }
         }
         case "earthquake": {
-          if (magnitude > 1.5) {
+          if (magnitude > 1.5) { // Threshold for seismic event
             eventCounterRef.current += 1
           }
           return {
@@ -69,8 +63,8 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
     [mode]
   )
 
+  // Continuously update our ref with the latest phone sensor data
   const handleDeviceMotion = useCallback((event: DeviceMotionEvent) => {
-    // ... (Keep your existing phone sensor code)
     if (event.accelerationIncludingGravity) {
       latestReadingRef.current = {
         x: event.accelerationIncludingGravity.x || 0,
@@ -80,50 +74,13 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
     }
   }, [])
 
-  // Helper function to handle the continuous USB data stream
-  const readSerialData = async (port: any) => {
-    const textDecoder = new TextDecoderStream()
-    const readableStreamClosed = port.readable.pipeTo(textDecoder.writable)
-    const reader = textDecoder.readable.getReader()
-    
-    let buffer = ""
-
-    try {
-              // Extract the numbers from the "x:-0.08y:0.02z:1.01" string using Regex
-              const match = trimmedLine.match(/x:\s*([-\d.]+)\s*y:\s*([-\d.]+)\s*z:\s*([-\d.]+)/i)
-              
-              if (match) {
-                // If it matches the Arduino format, parse the floats
-                latestExternalReadingRef.current = { 
-                  x: parseFloat(match[1]), 
-                  y: parseFloat(match[2]), 
-                  z: parseFloat(match[3]) 
-                }
-              } else {
-                // Keep the JSON parser as a backup just in case
-                const data = JSON.parse(trimmedLine)
-                latestExternalReadingRef.current = { x: data.x, y: data.y, z: data.z }
-              }
-            } catch (e) {
-              console.warn("Could not parse serial data line:", trimmedLine)
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error reading serial data", error)
-      setError("Lost connection to USB device.")
-    } finally {
-      reader.releaseLock()
-    }
-  }
-
   const startMonitoring = useCallback(async () => {
     if (status === "Monitoring") return
     setError(null)
 
+    // Setup for Phone Sensor
     if (hardwareSource === "phone") {
-      // ... (Phone permission logic remains exactly the same)
+      // Handle iOS 13+ permission requirements
       if (typeof (DeviceMotionEvent as any).requestPermission === 'function') {
         try {
           const permissionState = await (DeviceMotionEvent as any).requestPermission()
@@ -133,34 +90,11 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
           }
         } catch (err) {
           setError("Error requesting sensor permission. Make sure you are on HTTPS.")
+          console.error(err)
           return
         }
       }
       window.addEventListener('devicemotion', handleDeviceMotion)
-    } else if (hardwareSource === "external") {
-      // --- NEW USB SERIAL LOGIC ---
-      if (!("serial" in navigator)) {
-        setError("Your browser does not support Web Serial. Please use Chrome or Edge.")
-        return
-      }
-
-      try {
-        // This prompts the user to select the Arduino from a popup
-        const port = await (navigator as any).serial.requestPort()
-        // Ensure baudRate matches your Arduino Serial.begin(115200)
-        await port.open({ baudRate: 115200 }) 
-        
-        serialPortRef.current = port
-        keepReadingRef.current = true
-        
-        // Start the background reading loop
-        readSerialData(port)
-
-      } catch (err) {
-        console.error(err)
-        setError("Failed to connect to USB device. Make sure it is plugged in and no other app (like Arduino IDE) is using the port.")
-        return
-      }
     }
 
     setStatus("Monitoring")
@@ -168,6 +102,7 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
     dataBufferRef.current = []
     setChartData([])
 
+    // Sample the data every 80ms
     intervalRef.current = setInterval(() => {
       let currentX = 0
       let currentY = 0
@@ -178,17 +113,20 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
         currentY = latestReadingRef.current.y
         currentZ = latestReadingRef.current.z
       } else if (hardwareSource === "external") {
-        currentX = latestExternalReadingRef.current.x
-        currentY = latestExternalReadingRef.current.y
-        currentZ = latestExternalReadingRef.current.z
+        // PLACEHOLDER FOR EXTERNAL HARDWARE (ESP32/MPU6050)
+        // Set to 0 so it specifically bypasses the phone's sensors.
+        // Later, you will fetch WebSocket data here.
+        currentX = 0
+        currentY = 0
+        currentZ = 0
       }
 
       dataBufferRef.current.push({ x: currentX, y: currentY, z: currentZ })
-      if (dataBufferRef.current.length > MAX_DATA_POINTS) { //
+      if (dataBufferRef.current.length > MAX_DATA_POINTS) {
         dataBufferRef.current.shift()
       }
 
-      const { magnitude, metrics: newMetrics } = computeMetrics(currentX, currentY, currentZ) //
+      const { magnitude, metrics: newMetrics } = computeMetrics(currentX, currentY, currentZ)
       setMetrics(newMetrics)
       setChartData((prev) => {
         const next = [...prev, magnitude]
@@ -197,27 +135,56 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
     }, 80)
   }, [status, hardwareSource, computeMetrics, handleDeviceMotion])
 
-  const stopMonitoring = useCallback(async () => {
+  const stopMonitoring = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current)
       intervalRef.current = null
     }
-    
     if (hardwareSource === "phone") {
       window.removeEventListener('devicemotion', handleDeviceMotion)
-    } else if (hardwareSource === "external") {
-      // Properly close the USB serial port
-      keepReadingRef.current = false
-      if (serialPortRef.current) {
-        try {
-          await serialPortRef.current.close()
-        } catch (e) {
-          console.error("Error closing port:", e)
-        }
-        serialPortRef.current = null
-      }
     }
     setStatus("Stopped")
   }, [hardwareSource, handleDeviceMotion])
 
-  // ... (exportData and useEffect remain the same)
+  const exportData = useCallback(() => {
+    const buffer = dataBufferRef.current
+    if (buffer.length === 0) {
+      alert("No data to export. Start monitoring first.")
+      return
+    }
+    const header = "index,x,y,z,magnitude\n"
+    const rows = buffer
+      .map((d, i) => {
+        const mag = Math.sqrt(d.x * d.x + d.y * d.y + d.z * d.z)
+        return `${i},${d.x.toFixed(4)},${d.y.toFixed(4)},${d.z.toFixed(4)},${mag.toFixed(4)}`
+      })
+      .join("\n")
+
+    const blob = new Blob([header + rows], { type: "text/csv" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `sensor-data-${mode}-${Date.now()}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [mode])
+
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+      window.removeEventListener('devicemotion', handleDeviceMotion)
+    }
+  }, [handleDeviceMotion])
+
+  return {
+    status,
+    metrics,
+    chartData,
+    error, // New exported error state
+    startMonitoring,
+    stopMonitoring,
+    exportData,
+  }
+}
