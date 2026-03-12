@@ -9,12 +9,14 @@ import { useSensorSimulation } from "@/hooks/use-sensor-simulation"
 
 export type MonitoringMode = "structural" | "earthquake" | "tilt"
 export type MonitoringStatus = "Idle" | "Monitoring" | "Stopped"
+export type HardwareSource = "phone" | "external"
 
 export function DashboardContent() {
   const searchParams = useSearchParams()
   const mode = (searchParams.get("mode") as MonitoringMode) || "structural"
+  // Read the selected source from the URL (defaults to phone if missing)
+  const source = (searchParams.get("source") as HardwareSource) || "phone"
 
-  // Note: We are forcing "external" here so it looks for the Arduino connection
   const {
     status,
     metrics,
@@ -25,7 +27,7 @@ export function DashboardContent() {
     startMonitoring,
     stopMonitoring,
     exportData,
-  } = useSensorSimulation(mode, "external")
+  } = useSensorSimulation(mode, source)
 
   return (
     <main className="animated-bg min-h-screen px-4 py-6">
@@ -40,6 +42,7 @@ export function DashboardContent() {
         <DashboardTopBar 
           mode={mode} 
           status={status} 
+          source={source} // Pass the source to the top bar
           isConnected={isConnected}
           onConnect={connectExternalDevice}
         />
