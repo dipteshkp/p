@@ -89,23 +89,21 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
     let buffer = ""
 
     try {
-      while (keepReadingRef.current) {
-        const { value, done } = await reader.read()
-        if (done) break
-        
-        buffer += value
-        const lines = buffer.split('\n')
-        
-        // Keep the last incomplete line in the buffer
-        buffer = lines.pop() || ""
-
-        for (const line of lines) {
-          const trimmedLine = line.trim()
-          if (trimmedLine) {
-            try {
-              // Expecting JSON from Arduino like: {"x": 0.5, "y": 0.1, "z": 9.8}
-              const data = JSON.parse(trimmedLine)
-              latestExternalReadingRef.current = { x: data.x, y: data.y, z: data.z }
+              // Extract the numbers from the "x:-0.08y:0.02z:1.01" string using Regex
+              const match = trimmedLine.match(/x:\s*([-\d.]+)\s*y:\s*([-\d.]+)\s*z:\s*([-\d.]+)/i)
+              
+              if (match) {
+                // If it matches the Arduino format, parse the floats
+                latestExternalReadingRef.current = { 
+                  x: parseFloat(match[1]), 
+                  y: parseFloat(match[2]), 
+                  z: parseFloat(match[3]) 
+                }
+              } else {
+                // Keep the JSON parser as a backup just in case
+                const data = JSON.parse(trimmedLine)
+                latestExternalReadingRef.current = { x: data.x, y: data.y, z: data.z }
+              }
             } catch (e) {
               console.warn("Could not parse serial data line:", trimmedLine)
             }
