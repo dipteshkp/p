@@ -1,6 +1,6 @@
 "use client"
 
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Activity, Radio, TriangleAlert } from "lucide-react"
 import { GlassCard } from "@/components/glass-card"
 
@@ -36,6 +36,10 @@ const modes = [
 
 export function ModeSelection() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  
+  // Read the source from the previous page, default to phone if missing
+  const source = searchParams.get("source") || "phone"
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -45,7 +49,8 @@ export function ModeSelection() {
           <GlassCard
             key={mode.id}
             interactive
-            onClick={() => router.push(`/dashboard?mode=${mode.id}`)}
+            // Pass BOTH the mode and the source to the final dashboard
+            onClick={() => router.push(`/dashboard?mode=${mode.id}&source=${source}`)}
             className="flex flex-col items-center text-center gap-4 py-10"
           >
             <div
