@@ -21,7 +21,7 @@ export function DashboardContent() {
     startMonitoring,
     stopMonitoring,
     exportData,
-  } = useSensorSimulation(mode,"external")
+  } = useSensorSimulation(mode,)
 
   return (
     <main className="animated-bg min-h-screen px-4 py-6">
