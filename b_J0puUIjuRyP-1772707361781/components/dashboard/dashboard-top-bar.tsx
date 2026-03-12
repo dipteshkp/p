@@ -2,6 +2,8 @@
 
 import { BackButton } from "@/components/back-button"
 import type { MonitoringMode, MonitoringStatus } from "./dashboard-content"
+import { Button } from "@/components/ui/button"
+import { Usb } from "lucide-react"
 
 const modeLabels: Record<MonitoringMode, string> = {
   structural: "Structural Vibration",
@@ -18,9 +20,11 @@ const statusStyles: Record<MonitoringStatus, { bg: string; text: string; dot: st
 interface DashboardTopBarProps {
   mode: MonitoringMode
   status: MonitoringStatus
+  isConnected?: boolean
+  onConnect?: () => void
 }
 
-export function DashboardTopBar({ mode, status }: DashboardTopBarProps) {
+export function DashboardTopBar({ mode, status, isConnected, onConnect }: DashboardTopBarProps) {
   const style = statusStyles[status]
 
   return (
@@ -34,11 +38,19 @@ export function DashboardTopBar({ mode, status }: DashboardTopBarProps) {
           Mode: {modeLabels[mode]}
         </p>
       </div>
-      <div
-        className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${style.bg} self-start md:self-auto`}
-      >
-        <span className={`h-2 w-2 rounded-full ${style.dot} ${status === "Monitoring" ? "animate-pulse" : ""}`} />
-        <span className={`text-sm font-medium ${style.text}`}>{status}</span>
+      
+      <div className="flex items-center gap-4 self-start md:self-auto">
+        {!isConnected && (
+          <Button onClick={onConnect} variant="outline" className="gap-2 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border-blue-600/50">
+            <Usb className="w-4 h-4" />
+            Connect Arduino
+          </Button>
+        )}
+
+        <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${style.bg}`}>
+          <span className={`h-2 w-2 rounded-full ${style.dot} ${status === "Monitoring" ? "animate-pulse" : ""}`} />
+          <span className={`text-sm font-medium ${style.text}`}>{status}</span>
+        </div>
       </div>
     </div>
   )
