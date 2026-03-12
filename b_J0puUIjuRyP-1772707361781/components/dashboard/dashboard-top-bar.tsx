@@ -1,7 +1,7 @@
 "use client"
 
 import { BackButton } from "@/components/back-button"
-import type { MonitoringMode, MonitoringStatus } from "./dashboard-content"
+import type { MonitoringMode, MonitoringStatus, HardwareSource } from "./dashboard-content"
 import { Button } from "@/components/ui/button"
 import { Usb } from "lucide-react"
 
@@ -20,11 +20,12 @@ const statusStyles: Record<MonitoringStatus, { bg: string; text: string; dot: st
 interface DashboardTopBarProps {
   mode: MonitoringMode
   status: MonitoringStatus
+  source: HardwareSource // Accept the source prop
   isConnected?: boolean
   onConnect?: () => void
 }
 
-export function DashboardTopBar({ mode, status, isConnected, onConnect }: DashboardTopBarProps) {
+export function DashboardTopBar({ mode, status, source, isConnected, onConnect }: DashboardTopBarProps) {
   const style = statusStyles[status]
 
   return (
@@ -40,7 +41,8 @@ export function DashboardTopBar({ mode, status, isConnected, onConnect }: Dashbo
       </div>
       
       <div className="flex items-center gap-4 self-start md:self-auto">
-        {!isConnected && (
+        {/* ONLY show the button if the user selected External Hardware AND it isn't connected yet */}
+        {source === "external" && !isConnected && (
           <Button onClick={onConnect} variant="outline" className="gap-2 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border-blue-600/50">
             <Usb className="w-4 h-4" />
             Connect Arduino
