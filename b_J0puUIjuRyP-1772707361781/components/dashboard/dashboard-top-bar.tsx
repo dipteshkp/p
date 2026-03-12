@@ -20,7 +20,7 @@ const statusStyles: Record<MonitoringStatus, { bg: string; text: string; dot: st
 interface DashboardTopBarProps {
   mode: MonitoringMode
   status: MonitoringStatus
-  source: HardwareSource // Accept the source prop
+  source: HardwareSource
   isConnected?: boolean
   onConnect?: () => void
 }
@@ -41,9 +41,11 @@ export function DashboardTopBar({ mode, status, source, isConnected, onConnect }
       </div>
       
       <div className="flex items-center gap-4 self-start md:self-auto">
-        {/* ONLY show the button if the user selected External Hardware AND it isn't connected yet */}
         {source === "external" && !isConnected && (
-          <Button onClick={onConnect} variant="outline" className="gap-2 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border-blue-600/50">
+          <Button 
+            onClick={onConnect} 
+            className="gap-2 bg-[#06b6d4] hover:bg-[#22d3ee] text-[#0f172a] font-bold shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all duration-300 hover:shadow-[0_0_25px_rgba(34,211,238,0.6)] hover:-translate-y-0.5"
+          >
             <Usb className="w-4 h-4" />
             Connect Arduino
           </Button>
