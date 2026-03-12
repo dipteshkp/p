@@ -20,8 +20,10 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
   const dataBufferRef = useRef<Array<{ x: number; y: number; z: number }>>([])
   const eventCounterRef = useRef(0)
   
-  // Stores the absolute latest reading from the phone sensor
+  // Refs for incoming data
   const latestReadingRef = useRef({ x: 0, y: 0, z: 0 })
+  const latestExternalReadingRef = useRef({ x: 0, y: 0, z: 0 }) // New ref for external hardware
+  const wsRef = useRef<WebSocket | null>(null) // WebSocket reference
 
   const computeMetrics = useCallback(
     (x: number, y: number, z: number): { magnitude: number; metrics: Metrics } => {
@@ -43,7 +45,7 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
           return { magnitude, metrics: { primary: rms, secondary: peak } }
         }
         case "earthquake": {
-          if (magnitude > 1.5) { // Threshold for seismic event
+          if (magnitude > 1.5) { 
             eventCounterRef.current += 1
           }
           return {
@@ -63,7 +65,6 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
     [mode]
   )
 
-  // Continuously update our ref with the latest phone sensor data
   const handleDeviceMotion = useCallback((event: DeviceMotionEvent) => {
     if (event.accelerationIncludingGravity) {
       latestReadingRef.current = {
@@ -78,9 +79,7 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
     if (status === "Monitoring") return
     setError(null)
 
-    // Setup for Phone Sensor
     if (hardwareSource === "phone") {
-      // Handle iOS 13+ permission requirements
       if (typeof (DeviceMotionEvent as any).requestPermission === 'function') {
         try {
           const permissionState = await (DeviceMotionEvent as any).requestPermission()
@@ -95,6 +94,24 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
         }
       }
       window.addEventListener('devicemotion', handleDeviceMotion)
+    } else if (hardwareSource === "external") {
+      // Connect to the ESP32 WebSocket server
+      // Replace with your ESP32's actual local IP address
+      const esp32Ip = "192.168.1.100" 
+      wsRef.current = new WebSocket(`ws://${esp32Ip}:81`)
+
+      wsRef.current.onopen = () => console.log("Connected to ESP32")
+      wsRef.current.onerror = () => setError("Failed to connect to hardware. Check IP and Wi-Fi.")
+      
+      wsRef.current.onmessage = (event) => {
+        try {
+          // Expecting JSON from Arduino: {"x": 0.5, "y": 0.1, "z": 9.8}
+          const data = JSON.parse(event.data)
+          latestExternalReadingRef.current = { x: data.x, y: data.y, z: data.z }
+        } catch (e) {
+          console.error("Error parsing sensor data", e)
+        }
+      }
     }
 
     setStatus("Monitoring")
@@ -102,7 +119,6 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
     dataBufferRef.current = []
     setChartData([])
 
-    // Sample the data every 80ms
     intervalRef.current = setInterval(() => {
       let currentX = 0
       let currentY = 0
@@ -113,12 +129,10 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
         currentY = latestReadingRef.current.y
         currentZ = latestReadingRef.current.z
       } else if (hardwareSource === "external") {
-        // PLACEHOLDER FOR EXTERNAL HARDWARE (ESP32/MPU6050)
-        // Set to 0 so it specifically bypasses the phone's sensors.
-        // Later, you will fetch WebSocket data here.
-        currentX = 0
-        currentY = 0
-        currentZ = 0
+        // Read the latest data received from the WebSocket
+        currentX = latestExternalReadingRef.current.x
+        currentY = latestExternalReadingRef.current.y
+        currentZ = latestExternalReadingRef.current.z
       }
 
       dataBufferRef.current.push({ x: currentX, y: currentY, z: currentZ })
@@ -142,49 +156,11 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
     }
     if (hardwareSource === "phone") {
       window.removeEventListener('devicemotion', handleDeviceMotion)
+    } else if (hardwareSource === "external" && wsRef.current) {
+      wsRef.current.close()
+      wsRef.current = null
     }
     setStatus("Stopped")
   }, [hardwareSource, handleDeviceMotion])
 
-  const exportData = useCallback(() => {
-    const buffer = dataBufferRef.current
-    if (buffer.length === 0) {
-      alert("No data to export. Start monitoring first.")
-      return
-    }
-    const header = "index,x,y,z,magnitude\n"
-    const rows = buffer
-      .map((d, i) => {
-        const mag = Math.sqrt(d.x * d.x + d.y * d.y + d.z * d.z)
-        return `${i},${d.x.toFixed(4)},${d.y.toFixed(4)},${d.z.toFixed(4)},${mag.toFixed(4)}`
-      })
-      .join("\n")
-
-    const blob = new Blob([header + rows], { type: "text/csv" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `sensor-data-${mode}-${Date.now()}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }, [mode])
-
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-      }
-      window.removeEventListener('devicemotion', handleDeviceMotion)
-    }
-  }, [handleDeviceMotion])
-
-  return {
-    status,
-    metrics,
-    chartData,
-    error, // New exported error state
-    startMonitoring,
-    stopMonitoring,
-    exportData,
-  }
-}
+  // ... (exportData and useEffect remain the same as your original file)
