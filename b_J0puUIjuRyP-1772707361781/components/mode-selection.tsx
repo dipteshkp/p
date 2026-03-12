@@ -1,5 +1,6 @@
 "use client"
 
+import { Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Activity, Radio, TriangleAlert } from "lucide-react"
 import { GlassCard } from "@/components/glass-card"
@@ -34,7 +35,7 @@ const modes = [
   },
 ]
 
-export function ModeSelection() {
+function ModeSelectionContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   
@@ -49,7 +50,6 @@ export function ModeSelection() {
           <GlassCard
             key={mode.id}
             interactive
-            // Pass BOTH the mode and the source to the final dashboard
             onClick={() => router.push(`/dashboard?mode=${mode.id}&source=${source}`)}
             className="flex flex-col items-center text-center gap-4 py-10"
           >
@@ -79,5 +79,13 @@ export function ModeSelection() {
         )
       })}
     </div>
+  )
+}
+
+export function ModeSelection() {
+  return (
+    <Suspense fallback={<div className="text-center text-[#94a3b8] py-10">Loading modes...</div>}>
+      <ModeSelectionContent />
+    </Suspense>
   )
 }
