@@ -22,10 +22,14 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
   
   // Refs for incoming data
   const latestReadingRef = useRef({ x: 0, y: 0, z: 0 })
-  const latestExternalReadingRef = useRef({ x: 0, y: 0, z: 0 }) // New ref for external hardware
-  const wsRef = useRef<WebSocket | null>(null) // WebSocket reference
+  const latestExternalReadingRef = useRef({ x: 0, y: 0, z: 0 })
+  
+  // Ref to hold the active USB serial port and reader
+  const serialPortRef = useRef<any>(null)
+  const keepReadingRef = useRef(true)
 
   const computeMetrics = useCallback(
+    // ... (Keep your exact existing computeMetrics code here)
     (x: number, y: number, z: number): { magnitude: number; metrics: Metrics } => {
       const magnitude = Math.sqrt(x * x + y * y + z * z)
 
@@ -45,7 +49,7 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
           return { magnitude, metrics: { primary: rms, secondary: peak } }
         }
         case "earthquake": {
-          if (magnitude > 1.5) { 
+          if (magnitude > 1.5) {
             eventCounterRef.current += 1
           }
           return {
@@ -66,6 +70,7 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
   )
 
   const handleDeviceMotion = useCallback((event: DeviceMotionEvent) => {
+    // ... (Keep your existing phone sensor code)
     if (event.accelerationIncludingGravity) {
       latestReadingRef.current = {
         x: event.accelerationIncludingGravity.x || 0,
@@ -75,11 +80,52 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
     }
   }, [])
 
+  // Helper function to handle the continuous USB data stream
+  const readSerialData = async (port: any) => {
+    const textDecoder = new TextDecoderStream()
+    const readableStreamClosed = port.readable.pipeTo(textDecoder.writable)
+    const reader = textDecoder.readable.getReader()
+    
+    let buffer = ""
+
+    try {
+      while (keepReadingRef.current) {
+        const { value, done } = await reader.read()
+        if (done) break
+        
+        buffer += value
+        const lines = buffer.split('\n')
+        
+        // Keep the last incomplete line in the buffer
+        buffer = lines.pop() || ""
+
+        for (const line of lines) {
+          const trimmedLine = line.trim()
+          if (trimmedLine) {
+            try {
+              // Expecting JSON from Arduino like: {"x": 0.5, "y": 0.1, "z": 9.8}
+              const data = JSON.parse(trimmedLine)
+              latestExternalReadingRef.current = { x: data.x, y: data.y, z: data.z }
+            } catch (e) {
+              console.warn("Could not parse serial data line:", trimmedLine)
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error reading serial data", error)
+      setError("Lost connection to USB device.")
+    } finally {
+      reader.releaseLock()
+    }
+  }
+
   const startMonitoring = useCallback(async () => {
     if (status === "Monitoring") return
     setError(null)
 
     if (hardwareSource === "phone") {
+      // ... (Phone permission logic remains exactly the same)
       if (typeof (DeviceMotionEvent as any).requestPermission === 'function') {
         try {
           const permissionState = await (DeviceMotionEvent as any).requestPermission()
@@ -89,28 +135,33 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
           }
         } catch (err) {
           setError("Error requesting sensor permission. Make sure you are on HTTPS.")
-          console.error(err)
           return
         }
       }
       window.addEventListener('devicemotion', handleDeviceMotion)
     } else if (hardwareSource === "external") {
-      // Connect to the ESP32 WebSocket server
-      // Replace with your ESP32's actual local IP address
-      const esp32Ip = "192.168.1.100" 
-      wsRef.current = new WebSocket(`ws://${esp32Ip}:81`)
+      // --- NEW USB SERIAL LOGIC ---
+      if (!("serial" in navigator)) {
+        setError("Your browser does not support Web Serial. Please use Chrome or Edge.")
+        return
+      }
 
-      wsRef.current.onopen = () => console.log("Connected to ESP32")
-      wsRef.current.onerror = () => setError("Failed to connect to hardware. Check IP and Wi-Fi.")
-      
-      wsRef.current.onmessage = (event) => {
-        try {
-          // Expecting JSON from Arduino: {"x": 0.5, "y": 0.1, "z": 9.8}
-          const data = JSON.parse(event.data)
-          latestExternalReadingRef.current = { x: data.x, y: data.y, z: data.z }
-        } catch (e) {
-          console.error("Error parsing sensor data", e)
-        }
+      try {
+        // This prompts the user to select the Arduino from a popup
+        const port = await (navigator as any).serial.requestPort()
+        // Ensure baudRate matches your Arduino Serial.begin(115200)
+        await port.open({ baudRate: 115200 }) 
+        
+        serialPortRef.current = port
+        keepReadingRef.current = true
+        
+        // Start the background reading loop
+        readSerialData(port)
+
+      } catch (err) {
+        console.error(err)
+        setError("Failed to connect to USB device. Make sure it is plugged in and no other app (like Arduino IDE) is using the port.")
+        return
       }
     }
 
@@ -129,18 +180,17 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
         currentY = latestReadingRef.current.y
         currentZ = latestReadingRef.current.z
       } else if (hardwareSource === "external") {
-        // Read the latest data received from the WebSocket
         currentX = latestExternalReadingRef.current.x
         currentY = latestExternalReadingRef.current.y
         currentZ = latestExternalReadingRef.current.z
       }
 
       dataBufferRef.current.push({ x: currentX, y: currentY, z: currentZ })
-      if (dataBufferRef.current.length > MAX_DATA_POINTS) {
+      if (dataBufferRef.current.length > MAX_DATA_POINTS) { //
         dataBufferRef.current.shift()
       }
 
-      const { magnitude, metrics: newMetrics } = computeMetrics(currentX, currentY, currentZ)
+      const { magnitude, metrics: newMetrics } = computeMetrics(currentX, currentY, currentZ) //
       setMetrics(newMetrics)
       setChartData((prev) => {
         const next = [...prev, magnitude]
@@ -149,18 +199,27 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
     }, 80)
   }, [status, hardwareSource, computeMetrics, handleDeviceMotion])
 
-  const stopMonitoring = useCallback(() => {
+  const stopMonitoring = useCallback(async () => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current)
       intervalRef.current = null
     }
+    
     if (hardwareSource === "phone") {
       window.removeEventListener('devicemotion', handleDeviceMotion)
-    } else if (hardwareSource === "external" && wsRef.current) {
-      wsRef.current.close()
-      wsRef.current = null
+    } else if (hardwareSource === "external") {
+      // Properly close the USB serial port
+      keepReadingRef.current = false
+      if (serialPortRef.current) {
+        try {
+          await serialPortRef.current.close()
+        } catch (e) {
+          console.error("Error closing port:", e)
+        }
+        serialPortRef.current = null
+      }
     }
     setStatus("Stopped")
   }, [hardwareSource, handleDeviceMotion])
 
-  // ... (exportData and useEffect remain the same as your original file)
+  // ... (exportData and useEffect remain the same)
