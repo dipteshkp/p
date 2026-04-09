@@ -1,14 +1,15 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { Smartphone, Cpu } from "lucide-react"
+import { Smartphone, Cpu, BarChart3 } from "lucide-react" // Added BarChart3 icon
 import { GlassCard } from "@/components/glass-card"
 
 export function SensorSelection() {
   const router = useRouter()
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    // Changed grid-cols-2 to grid-cols-3 on medium screens to fit the new card
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       <GlassCard
         interactive
         onClick={() => router.push("/mode?source=phone")}
@@ -40,6 +41,24 @@ export function SensorSelection() {
         </p>
         <span className="text-xs text-[#94a3b8] font-medium mt-2 px-3 py-1 rounded-full bg-[#94a3b8]/10">
           Hardware Required
+        </span>
+      </GlassCard>
+
+      {/* NEW DATA INTERPRETATION CARD */}
+      <GlassCard
+        interactive
+        onClick={() => router.push("/data-interpretation")}
+        className="flex flex-col items-center text-center gap-4 py-10"
+      >
+        <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/20">
+          <BarChart3 className="h-12 w-12 text-purple-400" />
+        </div>
+        <h2 className="text-xl font-semibold text-[#e8ecf4]">Data Interpretation</h2>
+        <p className="text-sm text-[#94a3b8] max-w-xs leading-relaxed">
+          Upload previously exported CSV data to visualize and analyze historical graphs.
+        </p>
+        <span className="text-xs text-purple-400 font-medium mt-2 px-3 py-1 rounded-full bg-purple-500/10">
+          Offline Analysis
         </span>
       </GlassCard>
     </div>
