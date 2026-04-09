@@ -26,7 +26,8 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
   const readerRef = useRef<any>(null)
 
   const computeMetrics = useCallback(
-    (x: number, y: number, z: number): { magnitude: number; metrics: Metrics } => {
+    // CHANGED: Return 'chartValue' instead of 'magnitude'
+    (x: number, y: number, z: number): { chartValue: number; metrics: Metrics } => {
       const magnitude = Math.sqrt(x * x + y * y + z * z)
 
       switch (mode) {
@@ -42,24 +43,29 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
             ...buffer.map((d) => Math.sqrt(d.x * d.x + d.y * d.y + d.z * d.z)),
             magnitude
           )
-          return { magnitude, metrics: { primary: rms, secondary: peak } }
+          // Returns magnitude for the chart
+          return { chartValue: magnitude, metrics: { primary: rms, secondary: peak } }
         }
         case "earthquake": {
           if (magnitude > 1.5) { 
             eventCounterRef.current += 1
           }
+          // Returns magnitude for the chart
           return {
-            magnitude,
+            chartValue: magnitude,
             metrics: { primary: magnitude, secondary: eventCounterRef.current },
           }
         }
         case "tilt": {
-          const tiltAngle = Math.atan2(Math.sqrt(x * x + y * y), z) * (180 / Math.PI)
-          const stability = tiltAngle > 15 ? "Excessive Tilt" : "Stable"
-          return { magnitude, metrics: { primary: tiltAngle, secondary: stability } }
+          // CHANGED: Calculate Pitch (X/Z tilt) for positive and negative angles
+          const tiltAngle = Math.atan2(x, z) * (180 / Math.PI)
+          const stability = Math.abs(tiltAngle) > 15 ? "Excessive Tilt" : "Stable"
+          
+          // Returns the angle for the chart instead of magnitude!
+          return { chartValue: tiltAngle, metrics: { primary: Math.abs(tiltAngle), secondary: stability } }
         }
         default:
-          return { magnitude, metrics: { primary: 0, secondary: 0 } }
+          return { chartValue: magnitude, metrics: { primary: 0, secondary: 0 } }
       }
     },
     [mode]
@@ -144,7 +150,7 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
     dataBufferRef.current = []
     setChartData([])
 
-    intervalRef.current = setInterval(() => {
+intervalRef.current = setInterval(() => {
       // Both phone and external now pull from latestReadingRef!
       const { x, y, z } = latestReadingRef.current
 
@@ -153,13 +159,17 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
         dataBufferRef.current.shift()
       }
 
-      const { magnitude, metrics: newMetrics } = computeMetrics(x, y, z)
+      // CHANGED: Extract chartValue instead of magnitude
+      const { chartValue, metrics: newMetrics } = computeMetrics(x, y, z)
+      
       setMetrics(newMetrics)
+      
       setChartData((prev) => {
-        const next = [...prev, magnitude]
+        // CHANGED: Push chartValue to the graph data
+        const next = [...prev, chartValue]
         return next.length > MAX_DATA_POINTS ? next.slice(-MAX_DATA_POINTS) : next
       })
-    }, 80)
+    }, 80) // 80ms interval
   }, [status, hardwareSource, computeMetrics, handleDeviceMotion])
 
   const stopMonitoring = useCallback(() => {
