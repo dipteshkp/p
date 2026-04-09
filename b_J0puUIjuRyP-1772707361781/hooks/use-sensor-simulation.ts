@@ -183,17 +183,56 @@ intervalRef.current = setInterval(() => {
     setStatus("Stopped")
   }, [hardwareSource, handleDeviceMotion])
 
-  const exportData = useCallback(() => {
+const exportData = useCallback(() => {
     const buffer = dataBufferRef.current
     if (buffer.length === 0) return alert("No data to export.")
-    
-    const header = "index,x,y,z,magnitude\n"
-    const rows = buffer.map((d, i) => {
-      const mag = Math.sqrt(d.x * d.x + d.y * d.y + d.z * d.z)
-      return `${i},${d.x.toFixed(4)},${d.y.toFixed(4)},${d.z.toFixed(4)},${mag.toFixed(4)}`
-    }).join("\n")
 
-    const blob = new Blob([header + rows], { type: "text/csv" })
+    let header = ""
+    let rows = ""
+    let summary = ""
+
+    if (mode === "tilt") {
+      // Custom export for Tilt Mode
+      header = "index,x,y,z,tilt_angle,status\n"
+      
+      let excessiveCount = 0
+      let stableCount = 0
+
+      rows = buffer.map((d, i) => {
+        // Calculate the pitch angle
+        const tiltAngle = Math.atan2(d.x, d.z) * (180 / Math.PI)
+        const isExcessive = Math.abs(tiltAngle) > 15
+        const stability = isExcessive ? "Excessive Tilt" : "Stable"
+
+        if (isExcessive) {
+          excessiveCount++
+        } else {
+          stableCount++
+        }
+
+        return `${i},${d.x.toFixed(4)},${d.y.toFixed(4)},${d.z.toFixed(4)},${tiltAngle.toFixed(2)},${stability}`
+      }).join("\n")
+
+      // Calculate time in seconds (each data point is recorded every 80ms)
+      const excessiveTime = (excessiveCount * 0.08).toFixed(2)
+      const stableTime = (stableCount * 0.08).toFixed(2)
+
+      summary = `\n\n--- SUMMARY ---\n`
+      summary += `Stable Time (seconds),${stableTime}\n`
+      summary += `Excessive Tilt Time (seconds),${excessiveTime}\n`
+
+    } else {
+      // Default export for Structural & Earthquake Modes
+      header = "index,x,y,z,magnitude\n"
+      
+      rows = buffer.map((d, i) => {
+        const mag = Math.sqrt(d.x * d.x + d.y * d.y + d.z * d.z)
+        return `${i},${d.x.toFixed(4)},${d.y.toFixed(4)},${d.z.toFixed(4)},${mag.toFixed(4)}`
+      }).join("\n")
+    }
+
+    // Combine everything and trigger the download
+    const blob = new Blob([header + rows + summary], { type: "text/csv" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
