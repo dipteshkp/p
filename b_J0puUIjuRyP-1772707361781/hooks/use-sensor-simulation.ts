@@ -18,20 +18,21 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
   const [isConnected, setIsConnected] = useState(false)
   
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const dataBufferRef = useRef<Array<{ x: number; y: number; z: number }>>([])
+  const dataBufferRef = useRef<Array<{ x: number; y: number; z: number; sw: number }>>([])
   const eventCounterRef = useRef(0)
   
   // Stores the absolute latest reading from sensors
   const latestReadingRef = useRef({ x: 0, y: 0, z: 0 })
   const readerRef = useRef<any>(null)
 
-  const computeMetrics = useCallback(
-    // CHANGED: Return 'chartValue' instead of 'magnitude'
-    (x: number, y: number, z: number): { chartValue: number; metrics: Metrics } => {
+ const computeMetrics = useCallback(
+    // Added 'sw' to the input parameters
+    (x: number, y: number, z: number, sw: number): { chartValue: number; metrics: Metrics } => {
       const magnitude = Math.sqrt(x * x + y * y + z * z)
 
       switch (mode) {
         case "structural": {
+          // ... (Keep your existing structural logic here) ...
           const buffer = dataBufferRef.current
           const rms = Math.sqrt(
             buffer.reduce((sum, d) => {
@@ -43,25 +44,29 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
             ...buffer.map((d) => Math.sqrt(d.x * d.x + d.y * d.y + d.z * d.z)),
             magnitude
           )
-          // Returns magnitude for the chart
           return { chartValue: magnitude, metrics: { primary: rms, secondary: peak } }
         }
         case "earthquake": {
-          if (magnitude > 1.5) { 
+          // NEW EARTHQUAKE LOGIC USING SW-18015P
+          const isVibrating = sw === 1 // Assuming your sensor triggers HIGH (1) on vibration
+          
+          if (isVibrating) { 
             eventCounterRef.current += 1
           }
-          // Returns magnitude for the chart
+          
           return {
-            chartValue: magnitude,
-            metrics: { primary: magnitude, secondary: eventCounterRef.current },
+            // Plots 1 on the graph for a vibration spike, 0 for stable
+            chartValue: isVibrating ? 1 : 0, 
+            metrics: { 
+              primary: isVibrating ? "VIBRATING" : "Stable", // Text on the dashboard
+              secondary: eventCounterRef.current // Total vibration events tracked
+            },
           }
         }
         case "tilt": {
-          // CHANGED: Calculate Pitch (X/Z tilt) for positive and negative angles
+          // ... (Keep your existing tilt logic here) ...
           const tiltAngle = Math.atan2(x, z) * (180 / Math.PI)
           const stability = Math.abs(tiltAngle) > 15 ? "Excessive Tilt" : "Stable"
-          
-          // Returns the angle for the chart instead of magnitude!
           return { chartValue: tiltAngle, metrics: { primary: Math.abs(tiltAngle), secondary: stability } }
         }
         default:
@@ -115,7 +120,8 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
               latestReadingRef.current = {
                 x: data.x || 0,
                 y: data.y || 0,
-                z: data.z || 0
+                z: data.z || 0,
+                sw: data.sw !== undefined ? data.sw : 0 // Reads the SW-18015P sensor
               }
             } catch (e) {
               // Ignore partial or corrupted JSON lines
@@ -151,25 +157,24 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
     setChartData([])
 
 intervalRef.current = setInterval(() => {
-      // Both phone and external now pull from latestReadingRef!
-      const { x, y, z } = latestReadingRef.current
+      // Pull sw out of the reference
+      const { x, y, z, sw } = latestReadingRef.current
 
-      dataBufferRef.current.push({ x, y, z })
+      // Push sw to the buffer
+      dataBufferRef.current.push({ x, y, z, sw }) 
       if (dataBufferRef.current.length > MAX_DATA_POINTS) {
         dataBufferRef.current.shift()
       }
 
-      // CHANGED: Extract chartValue instead of magnitude
-      const { chartValue, metrics: newMetrics } = computeMetrics(x, y, z)
+      // Pass sw into computeMetrics
+      const { chartValue, metrics: newMetrics } = computeMetrics(x, y, z, sw)
       
       setMetrics(newMetrics)
-      
       setChartData((prev) => {
-        // CHANGED: Push chartValue to the graph data
         const next = [...prev, chartValue]
         return next.length > MAX_DATA_POINTS ? next.slice(-MAX_DATA_POINTS) : next
       })
-    }, 80) // 80ms interval
+    }, 80)
   }, [status, hardwareSource, computeMetrics, handleDeviceMotion])
 
   const stopMonitoring = useCallback(() => {
