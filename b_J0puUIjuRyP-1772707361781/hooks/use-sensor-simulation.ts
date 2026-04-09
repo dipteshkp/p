@@ -83,7 +83,7 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
     }
     try {
       const port = await (navigator as any).serial.requestPort()
-      await port.open({ baudRate: 9600 }) // Must match Arduino baud rate
+      await port.open({ baudRate: 115200 }) // Must match Arduino baud rate
       setIsConnected(true)
       
       const textDecoder = new TextDecoderStream()
