@@ -7,7 +7,7 @@ import type { MonitoringMode } from "./dashboard-content"
 interface MetricsPanelProps {
   mode: MonitoringMode
   metrics: {
-    // 1. ADDED 'string' HERE TO PREVENT THE ERROR
+    // 1. ADDED 'string' HERE TO PREVENT THE ERROR1
     primary: number | string 
     secondary: number | string
   }
