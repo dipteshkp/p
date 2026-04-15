@@ -7,7 +7,8 @@ import type { MonitoringMode } from "./dashboard-content"
 interface MetricsPanelProps {
   mode: MonitoringMode
   metrics: {
-    primary: number
+    // 1. ADDED 'string' HERE TO PREVENT THE ERROR
+    primary: number | string 
     secondary: number | string
   }
 }
@@ -28,8 +29,9 @@ const modeConfig: Record<
     secondaryUnit: "m/s\u00B2",
   },
   earthquake: {
-    primaryLabel: "Acceleration Magnitude",
-    primaryUnit: "m/s\u00B2",
+    // 2. UPDATED LABELS FOR THE NEW VIBRATION TEXT
+    primaryLabel: "Seismic Status", 
+    primaryUnit: "", // Left blank so it doesn't say "Stable m/s²"
     secondaryLabel: "Event Counter",
     secondaryUnit: "events",
   },
