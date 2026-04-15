@@ -6,7 +6,8 @@ import type { MonitoringMode, MonitoringStatus } from "@/components/dashboard/da
 const MAX_DATA_POINTS = 60
 
 interface Metrics {
-  primary: number
+  // ADDED 'string' HERE TO MATCH THE PANEL
+  primary: number | string 
   secondary: number | string
 }
 
