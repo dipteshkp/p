@@ -1,5 +1,3 @@
-"use client"
-
 import { SensorSelection } from "@/components/sensor-selection"
 import { BackButton } from "@/components/back-button"
 
