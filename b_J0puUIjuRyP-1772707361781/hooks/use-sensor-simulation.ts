@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react"
 import type { MonitoringMode, MonitoringStatus } from "@/components/dashboard/dashboard-content"
 
-const MAX_DATA_POINTS = 60
+const MAX_DATA_POINTS = 600
 
 interface Metrics {
   // ADDED 'string' HERE TO MATCH THE PANEL
