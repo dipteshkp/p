@@ -121,7 +121,7 @@ export function LiveChart({ chartData }: LiveChartProps) {
           <span className="text-sm font-medium text-[#e8ecf4]">Live Signal</span>
         </div>
         <span className="text-xs text-[#64748b]">
-          {chartData.length} / 60 samples
+          {chartData.length} / 600 samples
         </span>
       </div>
       <div className="h-64 md:h-80">
