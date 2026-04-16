@@ -88,15 +88,14 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
   }, [])
 
   // NEW: Function to connect Arduino via Web Serial API
-  const connectExternalDevice = async () => {
-    if (!("serial" in navigator)) {
-      setError("Web Serial API not supported. Please use Chrome or Edge.")
-      return
-    }
+  // --- FUNCTION 1: USB ---
+  const connectUsbDevice = async () => {
+    if (!("serial" in navigator)) return setError("Web Serial API not supported.")
     try {
       const port = await (navigator as any).serial.requestPort()
-      await port.open({ baudRate: 115200 }) // Must match Arduino baud rate
+      await port.open({ baudRate: 115200 }) 
       setIsConnected(true)
+      setError(null)
       
       const textDecoder = new TextDecoderStream()
       port.readable.pipeTo(textDecoder.writable)
@@ -104,35 +103,43 @@ export function useSensorSimulation(mode: MonitoringMode, hardwareSource: "phone
       readerRef.current = reader
 
       let buffer = ""
-
-      // Continuous loop to read incoming serial data
       while (true) {
         const { value, done } = await reader.read()
         if (done) break
         if (value) {
           buffer += value
           const lines = buffer.split('\n')
-          buffer = lines.pop() || "" // Keep incomplete line in buffer
-          
+          buffer = lines.pop() || "" 
           for (const line of lines) {
             try {
               const data = JSON.parse(line.trim())
-              // Update latest reading with Arduino JSON {x, y, z}
-              latestReadingRef.current = {
-                x: data.x || 0,
-                y: data.y || 0,
-                z: data.z || 0,
-                sw: data.sw !== undefined ? data.sw : 0 // Reads the SW-18015P sensor
-              }
-            } catch (e) {
-              // Ignore partial or corrupted JSON lines
-            }
+              latestReadingRef.current = { x: data.x||0, y: data.y||0, z: data.z||0, sw: data.sw!==undefined ? data.sw:0 }
+            } catch (e) {}
           }
         }
       }
     } catch (err) {
-      console.error(err)
-      setError("Failed to connect to hardware device.")
+      setError("Failed to connect via USB.")
+    }
+  }
+
+  // --- FUNCTION 2: WI-FI ---
+  const connectWifiDevice = async () => {
+    const ip = window.prompt("Enter the ESP32 IP Address (Find this in the Arduino Serial Monitor):")
+    if (!ip) return 
+    try {
+      const ws = new WebSocket(`ws://${ip}:81`)
+      ws.onopen = () => { setIsConnected(true); setError(null) }
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          latestReadingRef.current = { x: data.x||0, y: data.y||0, z: data.z||0, sw: data.sw!==undefined ? data.sw:0 }
+        } catch (e) {}
+      }
+      ws.onerror = () => { setError("Wi-Fi Connection Failed."); setIsConnected(false) }
+      ws.onclose = () => setIsConnected(false)
+    } catch (err) {
+      setError("Failed to initialize Wi-Fi.")
     }
   }
 
