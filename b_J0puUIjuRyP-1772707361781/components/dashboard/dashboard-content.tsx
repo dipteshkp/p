@@ -24,7 +24,8 @@ function DashboardInner() {
     chartData,
     error,
     isConnected,
-    connectExternalDevice,
+    connectUsbDevice,   // <-- Updated
+    connectWifiDevice,  // <-- Added
     startMonitoring,
     stopMonitoring,
     exportData,
@@ -43,7 +44,8 @@ function DashboardInner() {
         status={status} 
         source={source}
         isConnected={isConnected}
-        onConnect={connectExternalDevice}
+        onConnectUsb={connectUsbDevice} 
+        onConnectWifi={connectWifiDevice} 
       />
       <MetricsPanel mode={mode} metrics={metrics} />
       <LiveChart chartData={chartData} />
