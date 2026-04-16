@@ -3,7 +3,7 @@
 import { BackButton } from "@/components/back-button"
 import type { MonitoringMode, MonitoringStatus, HardwareSource } from "./dashboard-content"
 import { Button } from "@/components/ui/button"
-import { Usb } from "lucide-react"
+import { Usb,Wifi } from "lucide-react"
 
 const modeLabels: Record<MonitoringMode, string> = {
   structural: "Structural Vibration",
@@ -22,10 +22,11 @@ interface DashboardTopBarProps {
   status: MonitoringStatus
   source: HardwareSource
   isConnected?: boolean
-  onConnect?: () => void
+  onConnectUsb?: () => void
+  onConnectWifi?: () => void
 }
 
-export function DashboardTopBar({ mode, status, source, isConnected, onConnect }: DashboardTopBarProps) {
+export function DashboardTopBar({ mode, status, source, isConnected, onConnectUsb, onConnectWifi }: DashboardTopBarProps) {
   const style = statusStyles[status]
 
   return (
@@ -42,13 +43,20 @@ export function DashboardTopBar({ mode, status, source, isConnected, onConnect }
       
       <div className="flex items-center gap-4 self-start md:self-auto">
         {source === "external" && !isConnected && (
-          <Button 
-            onClick={onConnect} 
-            className="gap-2 bg-[#06b6d4] hover:bg-[#22d3ee] text-[#0f172a] font-bold shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all duration-300 hover:shadow-[0_0_25px_rgba(34,211,238,0.6)] hover:-translate-y-0.5"
-          >
-            <Usb className="w-4 h-4" />
-            Connect Arduino
-          </Button>
+          <div className="flex gap-3">
+            <Button 
+              onClick={onConnectUsb} 
+              className="gap-2 bg-[#06b6d4] hover:bg-[#22d3ee] text-[#0f172a] font-bold shadow-[0_0_15px_rgba(6,182,212,0.4)] transition-all"
+            >
+              <Usb className="w-4 h-4" /> USB
+            </Button>
+            <Button 
+              onClick={onConnectWifi} 
+              className="gap-2 bg-[#8b5cf6] hover:bg-[#a78bfa] text-white font-bold shadow-[0_0_15px_rgba(139,92,246,0.4)] transition-all"
+            >
+              <Wifi className="w-4 h-4" /> Wi-Fi
+            </Button>
+          </div>
         )}
 
         <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${style.bg}`}>
